@@ -9,6 +9,7 @@ import SwiftUI
 import AVFoundation
 import QuickLook
 import RoomPlan
+import VideoToolbox // ⭐️ 이미지 변환을 위해 추가
 
 enum ScanState {
     case idle
@@ -24,11 +25,11 @@ struct RoomScannerView: View {
     @State private var showAlert: Bool = false
     @State private var alertMessage: String = ""
     
-    // ⭐️ Bool 대신 카운터(Int)로 변경!
     @State private var captureCount: Int = 0
     @State private var showCaptureFlash: Bool = false
     
     @State private var show3DViewer: Bool = false
+    @State private var showPhotoGallery: Bool = false // ⭐️ 사진 뷰어를 띄울 상태 변수 추가
     
     var body: some View {
         ZStack {
@@ -52,7 +53,7 @@ struct RoomScannerView: View {
                 ZStack(alignment: .bottom) {
                     RoomCaptureViewRepresentable(
                         isScanning: $isScanning,
-                        captureCount: $captureCount, // ⭐️ 바뀐 변수 이름 적용
+                        captureCount: $captureCount,
                         onDefectCaptured: { transform, pixelBuffer in
                             viewModel.addDefect(transform: transform, pixelBuffer: pixelBuffer)
                         },
@@ -89,7 +90,7 @@ struct RoomScannerView: View {
                             HStack(spacing: 20) {
                                 Button(action: {
                                     showCaptureFlash = true
-                                    captureCount += 1 // ⭐️ 버튼 누를 때마다 숫자 1씩 증가!
+                                    captureCount += 1
                                 }) {
                                     VStack {
                                         Image(systemName: "camera.viewfinder")
@@ -129,6 +130,7 @@ struct RoomScannerView: View {
                     Text("총 \(viewModel.defects.count)개의 하자가 기록되었습니다.")
                         .foregroundColor(.gray)
                     
+                    // ⭐️ 3D 모델 보기 버튼
                     Button(action: { show3DViewer = true }) {
                         Text("3D 모델 확인하기 (돌려보기)")
                             .font(.headline).foregroundColor(.white)
@@ -136,9 +138,19 @@ struct RoomScannerView: View {
                             .background(Color.green).cornerRadius(12)
                     }
                     
+                    // ⭐️ 하자 사진 보기 버튼 추가
+                    if viewModel.defects.count > 0 {
+                        Button(action: { showPhotoGallery = true }) {
+                            Text("📸 촬영된 하자 사진 보기")
+                                .font(.headline).foregroundColor(.white)
+                                .frame(width: 250, height: 50)
+                                .background(Color.orange).cornerRadius(12)
+                        }
+                    }
+                    
                     Button(action: {
                         viewModel.defects.removeAll()
-                        captureCount = 0 // ⭐️ 초기화할 때 카운터도 0으로 돌려놓기
+                        captureCount = 0
                         scanState = .idle
                     }) {
                         Text("처음으로 돌아가기")
@@ -146,12 +158,13 @@ struct RoomScannerView: View {
                             .background(Color.gray.opacity(0.2)).cornerRadius(12)
                     }
                 }
+                // 3D 뷰어 모달
                 .sheet(isPresented: $show3DViewer) {
                     NavigationStack {
                         Group {
                             if let usdzURL = viewModel.savedUsdzURL {
                                 QuickLookPreview(url: usdzURL)
-                                    .ignoresSafeArea(edges: .bottom) // 하단 꽉 차게
+                                    .ignoresSafeArea(edges: .bottom)
                             } else {
                                 Text("3D 모델 파일이 없습니다.")
                             }
@@ -159,18 +172,15 @@ struct RoomScannerView: View {
                         .navigationTitle("3D 모델 미리보기")
                         .navigationBarTitleDisplayMode(.inline)
                         .toolbar {
-                            // 우측 상단에 닫기 버튼 추가
                             ToolbarItem(placement: .topBarTrailing) {
-                                Button(action: {
-                                    show3DViewer = false // ⭐️ 버튼 누르면 모달 닫힘
-                                }) {
-                                    Text("닫기")
-                                        .font(.headline)
-                                        .foregroundColor(.blue)
-                                }
+                                Button("닫기") { show3DViewer = false }
                             }
                         }
                     }
+                }
+                // ⭐️ 사진 갤러리 모달 추가
+                .sheet(isPresented: $showPhotoGallery) {
+                    DefectPhotoGalleryView(defects: viewModel.defects)
                 }
             }
         }
@@ -203,6 +213,62 @@ struct RoomScannerView: View {
             alertMessage = "설정에서 카메라 권한을 켜주세요."
             showAlert = true
         }
+    }
+}
+// MARK: - 📸 하자 사진 갤러리 뷰 (디스크에서 이미지 불러오기)
+struct DefectPhotoGalleryView: View {
+    @Environment(\.dismiss) var dismiss
+    
+    // ⭐️ ViewModel에서 사용하는 DefectInfo 타입으로 받기
+    var defects: [DefectInfo]
+    
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 15) {
+                    ForEach(0..<defects.count, id: \.self) { index in
+                        let defect = defects[index]
+                        
+                        VStack {
+                            // ⭐️ 저장된 파일명으로 이미지 불러오기
+                            if let uiImage = loadImageFromTempDirectory(fileName: defect.imageFileName) {
+                                Image(uiImage: uiImage)
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(height: 150)
+                                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                                    .shadow(radius: 3)
+                            } else {
+                                Rectangle()
+                                    .fill(Color.gray.opacity(0.3))
+                                    .frame(height: 150)
+                                    .overlay(Text("이미지 없음").font(.caption))
+                            }
+                            Text("하자 #\(index + 1)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+                .padding()
+            }
+            .navigationTitle("기록된 하자 사진")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("닫기") { dismiss() }
+                }
+            }
+        }
+    }
+    
+    // ⭐️ 임시 폴더(Temporary Directory) 경로에서 파일명으로 UIImage를 읽어오는 함수
+    private func loadImageFromTempDirectory(fileName: String) -> UIImage? {
+        let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
+        if let imageData = try? Data(contentsOf: fileURL) {
+            return UIImage(data: imageData)
+        }
+        return nil
     }
 }
 
