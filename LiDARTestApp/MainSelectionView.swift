@@ -51,7 +51,43 @@ struct MainSelectionView: View {
                 }
                 .padding(.horizontal, 20)
                 
+                // ⭐️ 3. 새로 추가된 Raw Data 수집 방식 버튼
+                NavigationLink(destination: RawDataScannerView()) {
+                    VStack(spacing: 10) {
+                        Text("3. Raw Data AI 수집 방식")
+                            .font(.title2).fontWeight(.bold)
+                        Text("서버 전송용 고해상도 RGB 영상, LiDAR 뎁스(PNG), IMU 데이터를 수집하여 ZIP 파일로 추출합니다.")
+                            .font(.footnote)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 20)
+                    .background(Color.green) // 색상은 초록색으로 구분했습니다
+                    .cornerRadius(16)
+                }
+                .padding(.horizontal, 20)
+                
                 Spacer()
+                
+                // ⭐️ 4. 새로 추가된 PLY 뷰어 버튼
+                NavigationLink(destination: PLYViewerView()) {
+                    VStack(spacing: 10) {
+                        Text("4. 생성된 PLY 파일 열어보기")
+                            .font(.title2).fontWeight(.bold)
+                        Text("AI 서버에서 전송받은 .ply 파일을 기기 폴더에서 선택하여 3D 뷰어로 확인합니다.")
+                            .font(.footnote)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 20)
+                    .background(Color.purple) // 보라색으로 구분
+                    .cornerRadius(16)
+                }
+                .padding(.horizontal, 20)
             }
             .padding(.top, 50)
             .navigationBarHidden(true)
